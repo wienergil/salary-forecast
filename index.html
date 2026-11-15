@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#143654">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="תחזית שכר">
+  <meta name="description" content="מחשבון מקומי ל־36 חודשים: שכר, בונוס רבעוני והבשלת מניות. הנתונים נשארים במכשיר.">
+  <title>תחזית שכר</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/icon-120.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <h1>תחזית שכר</h1>
+        <p class="tag">36 חודשים · הנתונים נשמרים במכשיר בלבד</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="app">
+    <div class="install-banner" id="install-banner" hidden>
+      <p>
+        <strong>להתקנה כשאפליקציה באייפון</strong>
+        פתחו את העמוד ב־Safari, לחצו על כפתור השיתוף, ואז «הוספה למסך הבית». אחרי ההתקנה האפליקציה עובדת גם בלי אינטרנט.
+      </p>
+      <button type="button" class="btn btn-ghost" id="btn-dismiss-install" aria-label="סגור">✕</button>
+    </div>
+
+    <div class="status" id="status" aria-live="polite"></div>
+
+    <section class="metrics" id="metrics" aria-label="סיכום"></section>
+
+    <div class="actions">
+      <label class="field start-field">
+        <span>חודש התחלת התחזית</span>
+        <input type="month" id="start" value="2026-12" aria-label="חודש התחלת התחזית">
+      </label>
+      <button type="button" class="btn" id="btn-example">טען דוגמה</button>
+      <button type="button" class="btn" id="btn-export">שיתוף / ייצוא</button>
+      <button type="button" class="btn" id="btn-import">ייבוא JSON</button>
+      <button type="button" class="btn btn-danger" id="btn-reset">איפוס</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+    </div>
+
+    <details class="block" open>
+      <summary>שכר בסיס</summary>
+      <div class="block-body">
+        <div class="fields">
+          <div class="field">
+            <label for="baseSalary">שכר חודשי ברוטו (₪)</label>
+            <input type="number" id="baseSalary" min="0" step="100" value="0" inputmode="decimal">
+          </div>
+          <div class="fields two">
+            <div class="field">
+              <label for="annualRaisePercent">העלאה שנתית (%)</label>
+              <input type="number" id="annualRaisePercent" step="0.1" value="0" inputmode="decimal">
+            </div>
+            <div class="field">
+              <label for="raiseMonth">חודש ההעלאה</label>
+              <select id="raiseMonth"></select>
+            </div>
+          </div>
+          <p class="help">השכר שהוזן הוא השכר בחודש ההתחלה. ההעלאה חלה במועד ההעלאה הראשון שאחריו, ואז כל שנה.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="block">
+      <summary>בונוס רבעוני</summary>
+      <div class="block-body">
+        <div class="fields">
+          <div class="field">
+            <span class="label">סוג בונוס</span>
+            <div class="seg" role="group" aria-label="סוג בונוס">
+              <button type="button" id="bonus-fixed" aria-pressed="true">סכום קבוע</button>
+              <button type="button" id="bonus-percent" aria-pressed="false">אחוז מהשכר הרבעוני</button>
+            </div>
+          </div>
+          <div class="field" id="wrap-bonus-amount">
+            <label for="bonusAmount">סכום לכל רבעון (₪)</label>
+            <input type="number" id="bonusAmount" min="0" step="100" value="0" inputmode="decimal">
+          </div>
+          <div class="field" id="wrap-bonus-percent" hidden>
+            <label for="bonusPercent">אחוז משכר הבסיס הרבעוני</label>
+            <input type="number" id="bonusPercent" min="0" step="0.1" value="0" inputmode="decimal">
+            <span class="help">שכר בסיס רבעוני = סכום שלושת חודשי הבסיס שמסתיימים בחודש התשלום.</span>
+          </div>
+          <div class="field">
+            <label for="bonusAchievement">עמידה צפויה ביעד (%)</label>
+            <input type="number" id="bonusAchievement" min="0" step="1" value="100" inputmode="decimal">
+          </div>
+          <div class="field">
+            <span class="label">חודשי תשלום</span>
+            <div class="chips" id="payout-months"></div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="block">
+      <summary>מניות (RSU)</summary>
+      <div class="block-body">
+        <div class="fields two">
+          <div class="field">
+            <label for="sharePriceUSD">מחיר מניה בתחילת התחזית (USD)</label>
+            <input type="number" id="sharePriceUSD" min="0" step="0.01" value="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="priceGrowthPercent">צמיחה שנתית צפויה במחיר (%)</label>
+            <input type="number" id="priceGrowthPercent" step="0.1" value="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="fxRate">שער USD/ILS</label>
+            <input type="number" id="fxRate" min="0" step="0.01" value="3.7" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="equityTaxPercentGlobal">ניכוי מס על מניות (%)</label>
+            <input type="number" id="equityTaxPercentGlobal" min="0" step="0.1" value="0" inputmode="decimal">
+            <span class="help">משמש גם כשיעור המס על מניות בהערכת הנטו, אם היא מופעלת.</span>
+          </div>
+        </div>
+        <p class="help" style="margin-top:8px">הצמיחה מחושבת מתחילת התחזית, מורכבת חודשית. הבשלה רבעונית אחרי הקליף, לפי כל מענק בנפרד.</p>
+      </div>
+    </details>
+
+    <details class="block">
+      <summary>מענקי מניות</summary>
+      <div class="block-body">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <button type="button" class="btn btn-primary" id="btn-add-grant">הוסף מענק</button>
+        </div>
+        <div id="grants"></div>
+      </div>
+    </details>
+
+    <details class="block">
+      <summary>הערכת נטו (אופציונלי)</summary>
+      <div class="block-body">
+        <label class="switch">
+          <input type="checkbox" id="netEnabled">
+          <span>
+            <strong>הצג הערכת נטו</strong>
+            <div class="help">זה לא חישוב מס ישראלי רשמי ואין כאן מדרגות מס, נקודות זיכוי או ביטוח לאומי. רק שיעור אפקטיבי שאתה מזין.</div>
+          </span>
+        </label>
+        <div class="fields two" id="net-fields" hidden style="margin-top:12px">
+          <div class="field">
+            <label for="salaryTaxPercent">מס אפקטיבי על שכר ובונוס (%)</label>
+            <input type="number" id="salaryTaxPercent" min="0" step="0.1" value="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="equityTaxPercent">מס אפקטיבי על מניות (%)</label>
+            <input type="number" id="equityTaxPercent" min="0" step="0.1" value="0" inputmode="decimal">
+          </div>
+        </div>
+        <div class="warning">הסכומים הם תחזית ברוטו לפי ההנחות שהוזנו. הערכת הנטו תלויה לחלוטין בשיעורים שתזין, ואינה ייעוץ מס.</div>
+      </div>
+    </details>
+
+    <section class="card">
+      <h2>תרשים חודשי <span class="hint">עמודות מוערמות · ציר הזמן משמאל לימין</span></h2>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--base)"></i>שכר בסיס</span>
+        <span><i class="swatch" style="background:var(--bonus)"></i>בונוס</span>
+        <span><i class="swatch" style="background:var(--equity)"></i>מניות שהבשילו</span>
+        <span><i class="swatch" style="background:var(--current); outline:1px solid var(--current-line)"></i>החודש הנוכחי</span>
+      </div>
+      <div class="chart-wrap">
+        <div id="chart-host"></div>
+      </div>
+      <div class="chart-detail" id="chart-detail">געו בעמודה לפירוט החודש.</div>
+    </section>
+
+    <section class="card">
+      <h2>לפי שנה</h2>
+      <div class="year-cards" id="year-cards"></div>
+    </section>
+
+    <section class="card">
+      <h2>פירוט חודשי</h2>
+      <div class="month-list" id="month-list"></div>
+    </section>
+
+    <footer class="note">
+      מחשבון מקומי בלבד. הנתונים נשמרים ב־localStorage של המכשיר ולא נשלחים לשום מקום. אפשר לייצא, לשתף ולגבות כקובץ JSON. תחזית המניות מניחה הבשלה רבעונית אחרי קליף, עם יתרה במענק האחרון כדי להגיע במדויק למספר המניות.
+    </footer>
+  </div>
+
+  <script src="calc-engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
