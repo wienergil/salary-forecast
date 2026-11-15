@@ -516,10 +516,61 @@
     navigator.serviceWorker.register("./sw.js").catch(function () {});
   }
 
+
+  var FX_AUTO_KEY = "salary-forecast-fx-auto";
+  var fxLastFetch = 0;
+  function fxAutoOn() { try { return localStorage.getItem(FX_AUTO_KEY) !== "0"; } catch (e) { return true; } }
+  function setFxStatus(t) { var el = $("fxStatus"); if (el) el.textContent = t; }
+  function fetchJson(url) {
+    return fetch(url, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); });
+  }
+  function updateFx(force) {
+    if (!$("fxAuto").checked) return;
+    if (!force && Date.now() - fxLastFetch < 30 * 60 * 1000) return;
+    fxLastFetch = Date.now();
+    setFxStatus("מעדכן שער…");
+    fetchJson("https://open.er-api.com/v6/latest/USD").then(function (d) {
+      var r = d && d.rates && d.rates.ILS; if (!r) throw new Error("no rate");
+      return { rate: r, date: d.time_last_update_utc ? new Date(d.time_last_update_utc) : new Date() };
+    }).catch(function () {
+      return fetchJson("https://api.frankfurter.dev/v1/latest?base=USD&symbols=ILS").then(function (d) {
+        var r = d && d.rates && d.rates.ILS; if (!r) throw new Error("no rate");
+        return { rate: r, date: new Date(d.date) };
+      });
+    }).then(function (res) {
+      if (!$("fxAuto").checked) return;
+      $("fxRate").value = Math.round(res.rate * 10000) / 10000;
+      onFormChange();
+      setFxStatus("שער עדכני: " + $("fxRate").value + " (נכון ל-" + res.date.toLocaleDateString("he-IL") + ")");
+    }).catch(function () {
+      fxLastFetch = 0;
+      setFxStatus("אין חיבור, משתמש בשער השמור האחרון.");
+    });
+  }
+  function bindFx() {
+    $("fxAuto").checked = fxAutoOn();
+    $("fxAuto").addEventListener("change", function () {
+      try { localStorage.setItem(FX_AUTO_KEY, $("fxAuto").checked ? "1" : "0"); } catch (e) {}
+      if ($("fxAuto").checked) updateFx(true); else setFxStatus("השער מוזן ידנית.");
+    });
+    $("fxRate").addEventListener("input", function (ev) {
+      if (ev.isTrusted && $("fxAuto").checked) {
+        $("fxAuto").checked = false;
+        try { localStorage.setItem(FX_AUTO_KEY, "0"); } catch (e) {}
+        setFxStatus("השער מוזן ידנית. סמן עדכון אוטומטי כדי לחזור לשער החי.");
+      }
+    });
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) updateFx(false); });
+    window.addEventListener("online", function () { updateFx(true); });
+    setInterval(function () { updateFx(false); }, 60 * 60 * 1000);
+  }
+
   bind();
+  bindFx();
   showInstallBanner();
   registerWorker();
   var stored = loadStored();
   applyInputs(stored || F.defaultInputs(), true);
   if (stored) setStatus("נטענו נתונים שנשמרו במכשיר.");
+  updateFx(true);
 })();

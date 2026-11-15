@@ -1,5 +1,5 @@
 /* תחזית שכר — offline service worker */
-var CACHE_NAME = "salary-forecast-pwa-v1";
+var CACHE_NAME = "salary-forecast-pwa-v2";
 var ASSETS = [
   "./",
   "./index.html",
@@ -44,6 +44,7 @@ self.addEventListener("activate", function (event) {
 self.addEventListener("fetch", function (event) {
   var request = event.request;
   if (request.method !== "GET") return;
+  if (new URL(request.url).origin !== self.location.origin) return;
 
   event.respondWith(
     caches.match(request, { ignoreSearch: true }).then(function (cached) {
