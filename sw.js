@@ -1,5 +1,5 @@
 /* תחזית שכר — offline service worker */
-var CACHE_NAME = "salary-forecast-pwa-v2";
+var CACHE_NAME = "salary-forecast-pwa-v3";
 var ASSETS = [
   "./",
   "./index.html",

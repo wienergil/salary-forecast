@@ -18,6 +18,10 @@ var SalaryForecast = (function () {
   ];
 
   var FORECAST_MONTHS = 36;
+  // Section 102 capital-gains track: shares must stay with the trustee 24 months from grant.
+  var S102_HOLD_MONTHS = 24;
+  // Surtax threshold (סעיף 121ב), 2024-2027 frozen at 721,560 ILS per year.
+  var SURTAX_THRESHOLD_DEFAULT = 721560;
 
   function num(value, fallback) {
     var n = Number(value);
@@ -97,6 +101,8 @@ var SalaryForecast = (function () {
           vestingMonths: 48,
           cliffMonths: 12,
           offsetMonths: 0,
+          grantDate: "",
+          grantPriceUSD: 0,
         },
       ],
       sharePriceUSD: 0,
@@ -105,6 +111,15 @@ var SalaryForecast = (function () {
       netEnabled: false,
       salaryTaxPercent: 0,
       equityTaxPercent: 0,
+      equityTaxMode: "flat",
+      s102OrdinaryPercent: 47,
+      s102CapitalPercent: 25,
+      s102NiiPercent: 0,
+      s102EarlySale: "hold",
+      surtaxEnabled: false,
+      surtaxPercent: 3,
+      surtaxCapitalExtraPercent: 2,
+      surtaxThreshold: SURTAX_THRESHOLD_DEFAULT,
     };
   }
 
@@ -124,6 +139,8 @@ var SalaryForecast = (function () {
             vestingMonths: num(g.vestingMonths, 48),
             cliffMonths: num(g.cliffMonths, 12),
             offsetMonths: num(g.offsetMonths, 0),
+            grantDate: g.grantDate || "",
+            grantPriceUSD: Math.max(0, num(g.grantPriceUSD, 0)),
           };
         })
       : defaultInputs().grants;
@@ -144,6 +161,15 @@ var SalaryForecast = (function () {
       netEnabled: !!src.netEnabled,
       salaryTaxPercent: Math.max(0, num(src.salaryTaxPercent, 0)),
       equityTaxPercent: Math.max(0, num(src.equityTaxPercent, 0)),
+      equityTaxMode: src.equityTaxMode === "s102" ? "s102" : "flat",
+      s102OrdinaryPercent: Math.max(0, num(src.s102OrdinaryPercent, d.s102OrdinaryPercent)),
+      s102CapitalPercent: Math.max(0, num(src.s102CapitalPercent, d.s102CapitalPercent)),
+      s102NiiPercent: Math.max(0, num(src.s102NiiPercent, 0)),
+      s102EarlySale: src.s102EarlySale === "sell" ? "sell" : "hold",
+      surtaxEnabled: !!src.surtaxEnabled,
+      surtaxPercent: Math.max(0, num(src.surtaxPercent, d.surtaxPercent)),
+      surtaxCapitalExtraPercent: Math.max(0, num(src.surtaxCapitalExtraPercent, d.surtaxCapitalExtraPercent)),
+      surtaxThreshold: Math.max(0, num(src.surtaxThreshold, d.surtaxThreshold)),
     };
   }
 
@@ -247,29 +273,127 @@ var SalaryForecast = (function () {
     return inp.sharePriceUSD * Math.pow(1 + inp.priceGrowthPercent / 100, months / 12);
   }
 
+  // Grant (allocation) date used for the 24-month trustee period. Defaults to vesting start.
+  function grantDateOf(grant) {
+    return parseYearMonth(grant.grantDate) || parseYearMonth(grant.start);
+  }
+
+  // When the shares of each vest event are sold (= when cash and tax happen).
+  // flat mode: sold at vest. s102 mode: vests before the 24-month date are held until it
+  // ("hold") or sold at vest and taxed fully as work income ("sell").
+  function saleEvents(inputs) {
+    var inp = normalizeInputs(inputs);
+    var out = [];
+    inp.grants.forEach(function (grant, gi) {
+      var gd = grantDateOf(grant);
+      var eligibleAt = gd ? addMonths(gd.year, gd.month, S102_HOLD_MONTHS) : null;
+      vestEventsForGrant(grant).forEach(function (ev) {
+        var sale = { year: ev.year, month: ev.month };
+        var eligible = true;
+        if (inp.equityTaxMode === "s102" && eligibleAt) {
+          var early = monthsBetween(ev.year, ev.month, eligibleAt.year, eligibleAt.month) > 0;
+          if (early && inp.s102EarlySale === "hold") sale = eligibleAt;
+          else if (early) eligible = false;
+        }
+        out.push({
+          grantId: grant.id || "g" + (gi + 1),
+          grantPriceUSD: grant.grantPriceUSD,
+          vestKey: ev.key,
+          shares: ev.shares,
+          year: sale.year,
+          month: sale.month,
+          key: formatYearMonth(sale.year, sale.month),
+          held: sale.year !== ev.year || sale.month !== ev.month,
+          eligible102: eligible,
+        });
+      });
+    });
+    return out;
+  }
+
+  // Section 102(b)(3) split for one sale, in USD.
+  // eligible: work-income part = min(grant price, sale price) x shares; capital part = gain above grant price.
+  // not eligible (sold before 24 months, 102(b)(4)): everything is work income.
+  function split102(shares, salePriceUSD, grantPriceUSD, eligible) {
+    var gross = shares * salePriceUSD;
+    if (!eligible) return { ordinaryUSD: gross, capitalUSD: 0 };
+    var ordinary = shares * Math.min(Math.max(0, grantPriceUSD), salePriceUSD);
+    return { ordinaryUSD: ordinary, capitalUSD: gross - ordinary };
+  }
+
   function equityForMonth(inputs, year, month) {
     var inp = normalizeInputs(inputs);
     var key = formatYearMonth(year, month);
-    var shares = 0;
-    allVestEvents(inp).forEach(function (ev) {
-      if (ev.key === key) shares += ev.shares;
-    });
     var usdPrice = sharePriceUSD(inp, year, month);
+    var shares = 0, ordinaryUSD = 0, capitalUSD = 0, heldShares = 0, earlyShares = 0;
+    saleEvents(inp).forEach(function (ev) {
+      if (ev.key !== key) return;
+      shares += ev.shares;
+      if (ev.held) heldShares += ev.shares;
+      if (!ev.eligible102) earlyShares += ev.shares;
+      var sp = split102(ev.shares, usdPrice, ev.grantPriceUSD, ev.eligible102);
+      ordinaryUSD += sp.ordinaryUSD;
+      capitalUSD += sp.capitalUSD;
+    });
     var usd = shares * usdPrice;
     return {
       shares: shares,
+      heldShares: heldShares,
+      earlyShares: earlyShares,
       usdPrice: usdPrice,
       usd: usd,
       ils: usd * inp.fxRate,
+      ordinaryIls: ordinaryUSD * inp.fxRate,
+      capitalIls: capitalUSD * inp.fxRate,
     };
   }
 
-  function netForMonth(base, bonus, equityIls, inputs) {
+  // Surtax (121ב) on equity, per month, for one calendar year. Salary and bonus fill the
+  // threshold first (their own surtax is assumed to be inside the salary tax rate);
+  // the 2% extra applies only to capital income that by itself exceeds the threshold.
+  function equitySurtaxForYear(inputs, year) {
+    var inp = normalizeInputs(inputs);
+    var res = {};
+    var th = inp.surtaxThreshold;
+    var totalCum = 0, capCum = 0;
+    function over(x) { return Math.max(0, x - th); }
+    for (var m = 1; m <= 12; m++) {
+      totalCum += baseSalaryForMonth(inp, year, m) + bonusForMonth(inp, year, m);
+      var eq = equityForMonth(inp, year, m);
+      var before = totalCum;
+      totalCum += eq.ordinaryIls + eq.capitalIls;
+      var capBefore = capCum;
+      capCum += eq.capitalIls;
+      res[m] = (inp.surtaxPercent / 100) * (over(totalCum) - over(before)) +
+        (inp.surtaxCapitalExtraPercent / 100) * (over(capCum) - over(capBefore));
+    }
+    return res;
+  }
+
+  function equityTaxForMonth(inputs, year, month, equity, surtaxCache) {
+    var inp = normalizeInputs(inputs);
+    var eq = equity || equityForMonth(inp, year, month);
+    if (inp.equityTaxMode !== "s102") {
+      var flat = eq.ils * (inp.equityTaxPercent / 100);
+      return { ordinary: 0, capital: 0, surtax: 0, flat: flat, total: flat };
+    }
+    var ordinary = eq.ordinaryIls * ((inp.s102OrdinaryPercent + inp.s102NiiPercent) / 100);
+    var capital = eq.capitalIls * (inp.s102CapitalPercent / 100);
+    var surtax = 0;
+    if (inp.surtaxEnabled) {
+      var cache = surtaxCache || {};
+      if (!cache[year]) cache[year] = equitySurtaxForYear(inp, year);
+      surtax = cache[year][month] || 0;
+    }
+    return { ordinary: ordinary, capital: capital, surtax: surtax, flat: 0, total: ordinary + capital + surtax };
+  }
+
+  function netForMonth(base, bonus, equityIls, inputs, equityTax) {
     var inp = normalizeInputs(inputs);
     if (!inp.netEnabled) return null;
     var salaryNet = (base + bonus) * (1 - inp.salaryTaxPercent / 100);
-    var equityNet = equityIls * (1 - inp.equityTaxPercent / 100);
-    return salaryNet + equityNet;
+    var tax = equityTax != null ? equityTax : equityIls * (inp.equityTaxPercent / 100);
+    return salaryNet + (equityIls - tax);
   }
 
   function forecast(inputs, now) {
@@ -278,6 +402,8 @@ var SalaryForecast = (function () {
     var today = currentYearMonth(now);
     var months = [];
     var yearMap = {};
+    var surtaxCache = {};
+    var s102 = inp.equityTaxMode === "s102";
 
     for (var i = 0; i < FORECAST_MONTHS; i++) {
       var d = addMonths(start.year, start.month, i);
@@ -285,7 +411,8 @@ var SalaryForecast = (function () {
       var bonus = bonusForMonth(inp, d.year, d.month);
       var equity = equityForMonth(inp, d.year, d.month);
       var gross = base + bonus + equity.ils;
-      var net = netForMonth(base, bonus, equity.ils, inp);
+      var tax = equityTaxForMonth(inp, d.year, d.month, equity, surtaxCache);
+      var net = netForMonth(base, bonus, equity.ils, inp, tax.total);
       var row = {
         index: i,
         year: d.year,
@@ -299,6 +426,15 @@ var SalaryForecast = (function () {
         equityUsdPrice: equity.usdPrice,
         equityUSD: equity.usd,
         equity: equity.ils,
+        equityHeldShares: equity.heldShares,
+        equityEarlyShares: equity.earlyShares,
+        equityOrdinary: equity.ordinaryIls,
+        equityCapital: equity.capitalIls,
+        equityTaxOrdinary: tax.ordinary,
+        equityTaxCapital: tax.capital,
+        equitySurtax: tax.surtax,
+        equityTax: tax.total,
+        equityNet: equity.ils - tax.total,
         gross: gross,
         net: net,
       };
@@ -312,6 +448,8 @@ var SalaryForecast = (function () {
           bonus: 0,
           equity: 0,
           equityShares: 0,
+          equityTax: 0,
+          equityNet: 0,
           gross: 0,
           net: inp.netEnabled ? 0 : null,
         };
@@ -322,6 +460,8 @@ var SalaryForecast = (function () {
       y.bonus += bonus;
       y.equity += equity.ils;
       y.equityShares += equity.shares;
+      y.equityTax += tax.total;
+      y.equityNet += equity.ils - tax.total;
       y.gross += gross;
       if (inp.netEnabled) y.net += net;
     }
@@ -341,6 +481,8 @@ var SalaryForecast = (function () {
         acc.bonus += y.bonus;
         acc.equity += y.equity;
         acc.equityShares += y.equityShares;
+        acc.equityTax += y.equityTax;
+        acc.equityNet += y.equityNet;
         acc.gross += y.gross;
         if (inp.netEnabled) acc.net += y.net;
         return acc;
@@ -350,6 +492,8 @@ var SalaryForecast = (function () {
         bonus: 0,
         equity: 0,
         equityShares: 0,
+        equityTax: 0,
+        equityNet: 0,
         gross: 0,
         net: inp.netEnabled ? 0 : null,
         months: FORECAST_MONTHS,
@@ -358,6 +502,7 @@ var SalaryForecast = (function () {
 
     return {
       inputs: inp,
+      s102: s102,
       start: start,
       months: months,
       years: years,
@@ -386,7 +531,14 @@ var SalaryForecast = (function () {
     vestEventsForGrant: vestEventsForGrant,
     allVestEvents: allVestEvents,
     sharePriceUSD: sharePriceUSD,
+    S102_HOLD_MONTHS: S102_HOLD_MONTHS,
+    SURTAX_THRESHOLD_DEFAULT: SURTAX_THRESHOLD_DEFAULT,
+    grantDateOf: grantDateOf,
+    saleEvents: saleEvents,
+    split102: split102,
     equityForMonth: equityForMonth,
+    equitySurtaxForYear: equitySurtaxForYear,
+    equityTaxForMonth: equityTaxForMonth,
     netForMonth: netForMonth,
     forecast: forecast,
   };

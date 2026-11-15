@@ -129,7 +129,7 @@
             <label class="help" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="fxAuto" checked> עדכון אוטומטי של השער</label>
             <span class="help" id="fxStatus"></span>
           </div>
-          <div class="field">
+          <div class="field" id="wrap-flat-tax">
             <label for="equityTaxPercentGlobal">ניכוי מס על מניות (%)</label>
             <input type="number" id="equityTaxPercentGlobal" min="0" step="0.1" value="0" inputmode="decimal">
             <span class="help">משמש גם כשיעור המס על מניות בהערכת הנטו, אם היא מופעלת.</span>
@@ -150,13 +150,100 @@
     </details>
 
     <details class="block">
+      <summary>מיסוי מניות (סעיף 102)</summary>
+      <div class="block-body">
+        <div class="fields">
+          <div class="field">
+            <span class="label">שיטת חישוב המס על המניות</span>
+            <div class="seg" role="group" aria-label="שיטת מיסוי מניות">
+              <button type="button" id="taxmode-flat" aria-pressed="true">אחוז קבוע</button>
+              <button type="button" id="taxmode-s102" aria-pressed="false">סעיף 102 (מסלול רווח הון)</button>
+            </div>
+          </div>
+          <p class="help" id="flat-mode-help">במצב "אחוז קבוע" משתמשים בשיעור שהוזן בשדה "ניכוי מס על מניות".</p>
+          <div id="s102-fields" hidden>
+            <div class="fields two">
+              <div class="field">
+                <label for="s102OrdinaryPercent">מס שולי על הרכיב הפירותי (%)</label>
+                <input type="number" id="s102OrdinaryPercent" min="0" step="0.1" value="47" inputmode="decimal">
+                <span class="help">המדרגה השולית שלך על הכנסת עבודה (47% במדרגה העליונה). חל על שווי המניה בהקצאה.</span>
+              </div>
+              <div class="field">
+                <label for="s102CapitalPercent">מס רווח הון על הרכיב ההוני (%)</label>
+                <input type="number" id="s102CapitalPercent" min="0" step="0.1" value="25" inputmode="decimal">
+                <span class="help">25% לפי סעיף 102(ב)(2). חל על העלייה שמעל מחיר ההקצאה.</span>
+              </div>
+              <div class="field">
+                <label for="s102NiiPercent">ביטוח לאומי ובריאות על הרכיב הפירותי (%)</label>
+                <input type="number" id="s102NiiPercent" min="0" step="0.01" value="0" inputmode="decimal">
+                <span class="help">עד 12.17% ב־2026, רק עד תקרת ההכנסה החייבת (51,910 ₪ לחודש, בפריסה ל־12 חודשים). אם השכר כבר מעל התקרה, בדרך כלל 0.</span>
+              </div>
+              <div class="field">
+                <label for="s102EarlySale">מניות שמבשילות לפני 24 חודשים מההקצאה</label>
+                <select id="s102EarlySale">
+                  <option value="hold">להחזיק עד תום 24 החודשים ואז למכור</option>
+                  <option value="sell">למכור מיד בהבשלה (הכול כהכנסת עבודה)</option>
+                </select>
+              </div>
+            </div>
+            <label class="switch" style="margin-top:12px">
+              <input type="checkbox" id="surtaxEnabled">
+              <span>
+                <strong>לכלול מס יסף על המניות</strong>
+                <div class="help">3% על ההכנסה השנתית שמעל הסף, ועוד 2% על הכנסה הונית שלבדה עוברת את הסף. השכר והבונוס "ממלאים" את הסף קודם.</div>
+              </span>
+            </label>
+            <div class="fields two" id="surtax-fields" hidden style="margin-top:8px">
+              <div class="field">
+                <label for="surtaxThreshold">סף מס יסף שנתי (₪)</label>
+                <input type="number" id="surtaxThreshold" min="0" step="1" value="721560" inputmode="decimal">
+              </div>
+              <div class="field">
+                <label for="surtaxPercent">מס יסף (%)</label>
+                <input type="number" id="surtaxPercent" min="0" step="0.1" value="3" inputmode="decimal">
+              </div>
+              <div class="field">
+                <label for="surtaxCapitalExtraPercent">תוספת על הכנסה הונית (%)</label>
+                <input type="number" id="surtaxCapitalExtraPercent" min="0" step="0.1" value="2" inputmode="decimal">
+              </div>
+            </div>
+            <p class="help" style="margin-top:8px">צריך להזין בכל מענק את "מחיר המניה בהקצאה" (ממוצע 30 ימי המסחר שלפני ההקצאה) ואת חודש ההקצאה. במצב הזה ההכנסה מהמניות מופיעה בחודש המכירה, כך שגם הברוטו החודשי יכול לזוז.</p>
+          </div>
+          <details class="explain">
+            <summary>מה זה סעיף 102? (הסבר ומקורות)</summary>
+            <div class="explain-body">
+              <p><strong>מסלול רווח הון עם נאמן</strong> הוא המסלול הנפוץ להקצאת RSU ואופציות לעובדים בישראל. המניות מופקדות אצל נאמן, ואין מס בהקצאה או בהבשלה. המס משולם רק כשהנאמן מוכר את המניות או מעביר אותן אליך.</p>
+              <ul>
+                <li><strong>24 חודשים מההקצאה:</strong> כדי ליהנות מהמסלול, המניות צריכות להישאר אצל הנאמן 24 חודשים לפחות ממועד ההקצאה וההפקדה, לא ממועד ההבשלה.</li>
+                <li><strong>חברה ציבורית, סעיף 102(ב)(3):</strong> שווי המניה בהקצאה, לפי ממוצע 30 ימי המסחר שלפניה, נחשב הכנסת עבודה וממוסה במס השולי. רק העלייה שמעליו ממוסה 25% כרווח הון.</li>
+                <li><strong>אם המניה ירדה:</strong> הרכיב שממוסה כעבודה לא יעלה על השווי במכירה. אז הכול ממוסה במס שולי על הסכום הנמוך יותר, ואין רכיב הוני.</li>
+                <li><strong>מכירה לפני 24 חודשים, סעיף 102(ב)(4):</strong> כל ההטבה ממוסה כהכנסת עבודה במס השולי.</li>
+                <li><strong>ביטוח לאומי:</strong> הרכיב ההוני פטור. הרכיב הפירותי נחשב הכנסת עבודה ועשוי להיות חייב בדמי ביטוח, עד התקרה.</li>
+                <li><strong>מס יסף 2026:</strong> 3% על הכנסה חייבת מעל 721,560 ₪ בשנה. מ־2025 נוספים 2% על הכנסה הונית שלבדה עוברת את הסף. הסף מוקפא עד 2027.</li>
+                <li><strong>ניכוי במקור:</strong> הנאמן מנכה בדרך כלל לפי השיעור המרבי, וההתאמה למדרגה האמיתית נעשית בדוח השנתי.</li>
+              </ul>
+              <p class="help">מקורות:
+                <a href="https://www.israel.com/he/laws/8989/102" target="_blank" rel="noopener">נוסח סעיף 102</a> ·
+                <a href="https://docs.deloitte.co.il/magazine2025/138/" target="_blank" rel="noopener">Deloitte, מדריך המיסוי 2025</a> ·
+                <a href="https://www.bizportal.co.il/career/news/article/20019998" target="_blank" rel="noopener">ביזפורטל, מיסוי RSU 2026</a> ·
+                <a href="https://www.bshcpa.co.il/%D7%AA%D7%92%D7%9E%D7%95%D7%9C-%D7%94%D7%95%D7%A0%D7%99-%D7%9E%D7%A1%D7%95%D7%92-rs-rsus/" target="_blank" rel="noopener">ביטוח לאומי על RSU</a> ·
+                <a href="https://f-cpa.co.il/%D7%9E%D7%A1-%D7%99%D7%A1%D7%A3-2026/" target="_blank" rel="noopener">מס יסף 2026</a>
+              </p>
+              <div class="warning">זו הערכה בלבד ולא ייעוץ מס. לא נכללים בה הפרשי שער בין ההקצאה למכירה, הוצאות, נקודות זיכוי, מדרגות מס מדויקות, הפסדים לקיזוז או מסלולים אחרים (פירותי, ללא נאמן). הסכום הסופי נקבע לפי אישור הנאמן והדוח השנתי. מומלץ לבדוק עם רואה חשבון.</div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </details>
+
+    <details class="block">
       <summary>הערכת נטו (אופציונלי)</summary>
       <div class="block-body">
         <label class="switch">
           <input type="checkbox" id="netEnabled">
           <span>
             <strong>הצג הערכת נטו</strong>
-            <div class="help">זה לא חישוב מס ישראלי רשמי ואין כאן מדרגות מס, נקודות זיכוי או ביטוח לאומי. רק שיעור אפקטיבי שאתה מזין.</div>
+            <div class="help">זה לא חישוב מס ישראלי רשמי ואין כאן מדרגות מס, נקודות זיכוי או ביטוח לאומי. רק שיעור אפקטיבי שאתה מזין. אם נבחר מיסוי לפי סעיף 102, הנטו של המניות מחושב לפיו.</div>
           </span>
         </label>
         <div class="fields two" id="net-fields" hidden style="margin-top:12px">
@@ -164,7 +251,7 @@
             <label for="salaryTaxPercent">מס אפקטיבי על שכר ובונוס (%)</label>
             <input type="number" id="salaryTaxPercent" min="0" step="0.1" value="0" inputmode="decimal">
           </div>
-          <div class="field">
+          <div class="field" id="wrap-flat-tax-net">
             <label for="equityTaxPercent">מס אפקטיבי על מניות (%)</label>
             <input type="number" id="equityTaxPercent" min="0" step="0.1" value="0" inputmode="decimal">
           </div>

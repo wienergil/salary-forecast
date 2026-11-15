@@ -448,3 +448,11 @@ footer.note {
   details.block { padding: 12px; }
   details.block > summary::after { display: none; }
 }
+
+/* Section 102 explanation panel */
+details.explain { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+details.explain > summary { cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: 0.9rem; color: var(--navy, #143654); }
+details.explain .explain-body { padding: 0 12px 12px; font-size: 0.86rem; line-height: 1.55; }
+details.explain ul { padding-inline-start: 18px; margin: 8px 0; }
+details.explain li { margin-bottom: 6px; }
+details.explain a { color: #1d4ed8; }

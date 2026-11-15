@@ -6,6 +6,7 @@
   var grantSeq = 1;
   var payoutSelected = [3, 6, 9, 12];
   var bonusType = "fixed";
+  var equityTaxMode = "flat";
   var statusEl = document.getElementById("status");
   var statusTimer = null;
   var selectedMonthKey = null;
@@ -76,7 +77,9 @@
       start: "2026-01",
       vestingMonths: 48,
       cliffMonths: 12,
-      offsetMonths: 0
+      offsetMonths: 0,
+      grantDate: "",
+      grantPriceUSD: 0
     }, partial || {});
   }
 
@@ -111,6 +114,8 @@
             '<div class="field"><label>תקופת הבשלה (חודשים)</label><input type="number" data-k="vestingMonths" min="1" step="1" inputmode="numeric" value="' + (g.vestingMonths || 48) + '"></div>' +
             '<div class="field"><label>קליף (חודשים)</label><input type="number" data-k="cliffMonths" min="0" step="1" inputmode="numeric" value="' + (g.cliffMonths || 0) + '"><span class="help">0 = בלי קליף, הבשלה רבעונית מתחילה אחרי 3 חודשים</span></div>' +
             '<div class="field span-2"><label>היסט חודש הבשלה</label><input type="number" data-k="offsetMonths" step="1" inputmode="numeric" value="' + (g.offsetMonths || 0) + '"><span class="help">הזזה של מועדי ההבשלה במספר חודשים ביחס לתאריך ההתחלה</span></div>' +
+            '<div class="field s102-only"' + (equityTaxMode === "s102" ? "" : " hidden") + '><label>חודש ההקצאה (לסעיף 102)</label><input type="month" data-k="grantDate" value="' + (g.grantDate || "") + '"><span class="help">ריק = כמו תחילת ההבשלה. 24 החודשים נספרים ממנו.</span></div>' +
+            '<div class="field s102-only"' + (equityTaxMode === "s102" ? "" : " hidden") + '><label>מחיר מניה בהקצאה (USD)</label><input type="number" data-k="grantPriceUSD" min="0" step="0.01" inputmode="decimal" value="' + (g.grantPriceUSD || 0) + '"><span class="help">ממוצע 30 ימי המסחר שלפני ההקצאה. מופיע באישור הנאמן או בפורטל.</span></div>' +
           '</div>' +
         '</div>'
       );
@@ -129,7 +134,9 @@
         start: val("start"),
         vestingMonths: Number(val("vestingMonths") || 0),
         cliffMonths: Number(val("cliffMonths") || 0),
-        offsetMonths: Number(val("offsetMonths") || 0)
+        offsetMonths: Number(val("offsetMonths") || 0),
+        grantDate: val("grantDate"),
+        grantPriceUSD: Number(val("grantPriceUSD") || 0)
       };
     });
   }
@@ -152,8 +159,29 @@
       fxRate: Number($("fxRate").value || 0),
       netEnabled: $("netEnabled").checked,
       salaryTaxPercent: Number($("salaryTaxPercent").value || 0),
-      equityTaxPercent: equityTax
+      equityTaxPercent: equityTax,
+      equityTaxMode: equityTaxMode,
+      s102OrdinaryPercent: Number($("s102OrdinaryPercent").value || 0),
+      s102CapitalPercent: Number($("s102CapitalPercent").value || 0),
+      s102NiiPercent: Number($("s102NiiPercent").value || 0),
+      s102EarlySale: $("s102EarlySale").value,
+      surtaxEnabled: $("surtaxEnabled").checked,
+      surtaxPercent: Number($("surtaxPercent").value || 0),
+      surtaxCapitalExtraPercent: Number($("surtaxCapitalExtraPercent").value || 0),
+      surtaxThreshold: Number($("surtaxThreshold").value || 0)
     };
+  }
+
+  function renderTaxMode() {
+    var s102 = equityTaxMode === "s102";
+    $("taxmode-flat").setAttribute("aria-pressed", s102 ? "false" : "true");
+    $("taxmode-s102").setAttribute("aria-pressed", s102 ? "true" : "false");
+    $("s102-fields").hidden = !s102;
+    $("flat-mode-help").hidden = s102;
+    $("wrap-flat-tax").hidden = s102;
+    $("wrap-flat-tax-net").hidden = s102;
+    $("surtax-fields").hidden = !$("surtaxEnabled").checked;
+    document.querySelectorAll("#grants .s102-only").forEach(function (el) { el.hidden = !s102; });
   }
 
   function applyInputs(raw, skipStorage) {
@@ -175,9 +203,19 @@
     $("equityTaxPercent").value = inp.equityTaxPercent;
     $("equityTaxPercentGlobal").value = inp.equityTaxPercent;
     $("net-fields").hidden = !inp.netEnabled;
+    equityTaxMode = inp.equityTaxMode;
+    $("s102OrdinaryPercent").value = inp.s102OrdinaryPercent;
+    $("s102CapitalPercent").value = inp.s102CapitalPercent;
+    $("s102NiiPercent").value = inp.s102NiiPercent;
+    $("s102EarlySale").value = inp.s102EarlySale;
+    $("surtaxEnabled").checked = inp.surtaxEnabled;
+    $("surtaxPercent").value = inp.surtaxPercent;
+    $("surtaxCapitalExtraPercent").value = inp.surtaxCapitalExtraPercent;
+    $("surtaxThreshold").value = inp.surtaxThreshold;
     renderBonusType();
     renderPayoutChips();
     renderGrants(inp.grants);
+    renderTaxMode();
     if (!skipStorage) persist();
     refresh();
   }
@@ -209,7 +247,7 @@
       bonusPercent: 0,
       payoutMonths: [3, 6, 9, 12],
       bonusAchievement: 100,
-      grants: [{ id: "g-sample", shares: 4000, start: "2026-01", vestingMonths: 48, cliffMonths: 12, offsetMonths: 0 }],
+      grants: [{ id: "g-sample", shares: 4000, start: "2026-01", vestingMonths: 48, cliffMonths: 12, offsetMonths: 0, grantDate: "2026-01", grantPriceUSD: 18 }],
       sharePriceUSD: 20,
       priceGrowthPercent: 0,
       fxRate: 3.7,
@@ -245,24 +283,38 @@
       "</article>" +
       '<article class="metric"><div class="k">ממוצע חודשי ברוטו</div><div class="v">' + formatILS(result.averageGross) + "</div>" + netBlock + "</article>" +
       '<article class="metric"><div class="k">החודש הנוכחי</div><div class="v">' + currentHtml + "</article>" +
-      '<article class="metric"><div class="k">מניות שיבשילו בחלון</div><div class="v">' + formatNum(result.totals.equityShares, 0) + '</div><div class="s">שווי ברוטו ' + formatILS(result.totals.equity) + "</div></article>";
+      '<article class="metric"><div class="k">מניות שיבשילו בחלון</div><div class="v">' + formatNum(result.totals.equityShares, 0) + '</div><div class="s">שווי ברוטו ' + formatILS(result.totals.equity) + (result.s102 ? " · מס לפי 102 " + formatILS(result.totals.equityTax) + " · נטו " + formatILS(result.totals.equityNet) : "") + "</div></article>";
 
     $("year-cards").innerHTML = result.years.map(function (y) {
       return '<div class="year-card"><h3>שנת ' + y.year + ' · ' + y.months + ' חודשים</h3>' +
         "<p><span>בסיס</span><b>" + formatILS(y.base) + "</b></p>" +
         "<p><span>בונוס</span><b>" + formatILS(y.bonus) + "</b></p>" +
         "<p><span>מניות</span><b>" + formatILS(y.equity) + "</b></p>" +
+        (result.s102 ? "<p><span>מס על מניות (102)</span><b>" + formatILS(y.equityTax) + "</b></p><p><span>מניות נטו</span><b>" + formatILS(y.equityNet) + "</b></p>" : "") +
         "<p><span>סה״כ ברוטו</span><b>" + formatILS(y.gross) + "</b></p>" +
         (result.inputs.netEnabled ? "<p><span>הערכת נטו</span><b>" + formatILS(y.net) + "</b></p>" : "") +
         "</div>";
     }).join("");
   }
 
+  var showEquityTax = false;
   function breakdown(row, showNet) {
+    var eqTax = "";
+    if (showEquityTax && row.equity) {
+      eqTax = " · מס מניות " + formatILS(row.equityTax);
+      if (row.equityTaxOrdinary != null) {
+        eqTax += " (פירותי " + formatILS(row.equityTaxOrdinary) + ", הוני " + formatILS(row.equityTaxCapital) +
+          (row.equitySurtax ? ", יסף " + formatILS(row.equitySurtax) : "") + ")";
+      }
+      eqTax += " · מניות נטו " + formatILS(row.equityNet);
+      if (row.equityHeldShares) eqTax += " · כולל מניות שהוחזקו עד 24 חודשים";
+      if (row.equityEarlyShares) eqTax += " · נמכר לפני 24 חודשים: הכול פירותי";
+    }
     return "בסיס " + formatILS(row.base) +
       " · בונוס " + formatILS(row.bonus) +
       " · מניות " + formatILS(row.equity) +
       (row.equityShares ? " (" + formatNum(row.equityShares, 2) + ")" : "") +
+      eqTax +
       (showNet && row.net != null ? " · נטו " + formatILS(row.net) : "");
   }
 
@@ -379,6 +431,7 @@
 
   function refresh() {
     var result = F.forecast(readInputs());
+    showEquityTax = result.s102;
     renderMetrics(result);
     renderChart(result);
     renderMonthList(result);
@@ -386,6 +439,7 @@
 
   function onFormChange() {
     $("net-fields").hidden = !$("netEnabled").checked;
+    $("surtax-fields").hidden = !$("surtaxEnabled").checked;
     if ($("netEnabled").checked) {
       if (document.activeElement === $("equityTaxPercentGlobal")) {
         $("equityTaxPercent").value = $("equityTaxPercentGlobal").value;
@@ -458,10 +512,13 @@
     });
     $("bonus-fixed").addEventListener("click", function () { bonusType = "fixed"; renderBonusType(); onFormChange(); });
     $("bonus-percent").addEventListener("click", function () { bonusType = "percent"; renderBonusType(); onFormChange(); });
+    $("taxmode-flat").addEventListener("click", function () { equityTaxMode = "flat"; renderTaxMode(); onFormChange(); });
+    $("taxmode-s102").addEventListener("click", function () { equityTaxMode = "s102"; renderTaxMode(); onFormChange(); });
     $("btn-add-grant").addEventListener("click", function () {
       var grants = readGrantsFromDom();
       grants.push(newGrant());
       renderGrants(grants);
+      renderTaxMode();
       onFormChange();
     });
     $("grants").addEventListener("click", function (ev) {
@@ -473,7 +530,7 @@
       onFormChange();
     });
     $("grants").addEventListener("input", onFormChange);
-    ["start","baseSalary","annualRaisePercent","raiseMonth","bonusAmount","bonusPercent","bonusAchievement","sharePriceUSD","priceGrowthPercent","fxRate","netEnabled","salaryTaxPercent","equityTaxPercent","equityTaxPercentGlobal"].forEach(function (id) {
+    ["start","baseSalary","annualRaisePercent","raiseMonth","bonusAmount","bonusPercent","bonusAchievement","sharePriceUSD","priceGrowthPercent","fxRate","netEnabled","salaryTaxPercent","equityTaxPercent","equityTaxPercentGlobal","s102OrdinaryPercent","s102CapitalPercent","s102NiiPercent","s102EarlySale","surtaxEnabled","surtaxPercent","surtaxCapitalExtraPercent","surtaxThreshold"].forEach(function (id) {
       $(id).addEventListener("input", onFormChange);
       $(id).addEventListener("change", onFormChange);
     });
